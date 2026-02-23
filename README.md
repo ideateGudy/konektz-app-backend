@@ -229,7 +229,8 @@ Creates a new user account.
       "id": "a1b2c3d4-...",
       "username": "johndoe",
       "email": "john@example.com",
-      "created_at": "2026-02-23T10:00:00.000Z"
+      "created_at": "2026-02-23T10:00:00.000Z",
+      "updated_at": "2026-02-23T10:00:00.000Z"
     }
   }
 }
