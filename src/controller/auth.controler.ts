@@ -20,13 +20,19 @@ export const register = async (req: Request, res: Response): Promise<void> => {
   const hashedPassword = await bcrypt.hash(password, SALT);
 
   const result = await pool.query(
-    "INSERT INTO users (username, email, password) VALUES ($1, $2, $3) RETURNING id, username, email, created_at",
-    [username, email, hashedPassword]
+    "INSERT INTO users (username, email, password) VALUES ($1, $2, $3) RETURNING *",
+    [username, email, hashedPassword],
   );
 
   const user = result.rows[0];
 
-  res.status(201).json({status: "success", message: "User registered successfully", data: { user } });
+  res
+    .status(201)
+    .json({
+      status: "success",
+      message: "User registered successfully",
+      data: { user: { id: user.id, username: user.username, email: user.email, created_at: user.created_at, updated_at: user.updated_at } },
+    });
 };
 
 export const login = async (req: Request, res: Response): Promise<void> => {
@@ -36,19 +42,23 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     throw new AppError("email and password are required", 400);
   }
 
-  const result = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
+  const result = await pool.query("SELECT * FROM users WHERE email = $1", [
+    email,
+  ]);
   const user = result.rows[0];
 
   if (!user || !(await bcrypt.compare(password, user.password))) {
     throw new AppError("Invalid email or password", 401);
   }
 
-  const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: "7d" });
+  const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, {
+    expiresIn: "7d",
+  });
 
   res.status(200).json({
     status: "success",
     message: "Login successful",
     token,
-    data: { user: { id: user.id, username: user.username, email: user.email } },
+    data: { user: { id: user.id, username: user.username, email: user.email, created_at: user.created_at, updated_at: user.updated_at } },
   });
 };
