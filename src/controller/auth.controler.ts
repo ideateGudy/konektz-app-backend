@@ -26,7 +26,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
 
   const user = result.rows[0];
 
-  res.status(201).json({statusCode: 201, message: "User registered successfully", user });
+  res.status(201).json({status: "success", message: "User registered successfully", data: { user } });
 };
 
 export const login = async (req: Request, res: Response): Promise<void> => {
@@ -46,9 +46,9 @@ export const login = async (req: Request, res: Response): Promise<void> => {
   const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: "7d" });
 
   res.status(200).json({
-    statusCode: 200,
+    status: "success",
     message: "Login successful",
     token,
-    user: { id: user.id, username: user.username, email: user.email },
+    data: { user: { id: user.id, username: user.username, email: user.email } },
   });
 };

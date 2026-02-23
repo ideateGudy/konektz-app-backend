@@ -127,11 +127,12 @@ Run the following SQL to create the required `users` table:
 
 ```sql
 CREATE TABLE users (
-  id         SERIAL PRIMARY KEY,
-  username   VARCHAR(50)  UNIQUE NOT NULL,
-  email      VARCHAR(255) UNIQUE NOT NULL,
-  password   VARCHAR(255) NOT NULL,
-  created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    username VARCHAR(50) NOT NULL UNIQUE,
+    email VARCHAR(100) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 ```
 
@@ -156,7 +157,7 @@ All responses follow a consistent JSON shape:
 
 ```json
 {
-  "statusCode": 200,
+  "status": "success" | "error",
   "message": "...",
   "data": { }
 }
@@ -221,13 +222,15 @@ Creates a new user account.
 
 ```json
 {
-  "statusCode": 201,
+  "status": "success",
   "message": "User registered successfully",
-  "user": {
-    "id": 1,
-    "username": "johndoe",
-    "email": "john@example.com",
-    "created_at": "2026-02-23T10:00:00.000Z"
+  "data": {
+    "user": {
+      "id": "a1b2c3d4-...",
+      "username": "johndoe",
+      "email": "john@example.com",
+      "created_at": "2026-02-23T10:00:00.000Z"
+    }
   }
 }
 ```
@@ -264,13 +267,15 @@ Authenticates a user and returns a signed JWT.
 
 ```json
 {
-  "statusCode": 200,
+  "status": "success",
   "message": "Login successful",
   "token": "<JWT_TOKEN>",
-  "user": {
-    "id": 1,
-    "username": "johndoe",
-    "email": "john@example.com"
+  "data": {
+    "user": {
+      "id": "a1b2c3d4-...",
+      "username": "johndoe",
+      "email": "john@example.com"
+    }
   }
 }
 ```
@@ -311,7 +316,7 @@ All errors return a consistent JSON envelope:
 
 ```json
 {
-  "statusCode": 400,
+  "status": "error",
   "message": "Descriptive error message"
 }
 ```

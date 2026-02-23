@@ -1,6 +1,5 @@
 import { Request, Response, NextFunction } from "express";
 import { AppError } from "../utils/AppError";
-import path from "node:path";
 
 const isProduction = process.env.NODE_ENV === "production";
 
@@ -30,7 +29,7 @@ export const errorHandler = (
   // Operational errors (AppError): send the intended status + message
   if (err instanceof AppError) {
     res.status(err.statusCode).json({
-      statusCode: err.statusCode,
+      status: "error",
       message: err.message,
     });
     return;
@@ -40,7 +39,7 @@ export const errorHandler = (
   const normalized = normalizeError(err);
   if (normalized) {
     res.status(normalized.statusCode).json({
-      statusCode: normalized.statusCode,
+      status: "error",
       message: normalized.message,
     });
     return;
@@ -50,7 +49,7 @@ export const errorHandler = (
   console.error("Unhandled error:", err);
 
   res.status(500).json({
-    statusCode: 500,
+    status: "error",
     method: _req.method,
     path: _req.originalUrl,
     message: isProduction ? "Internal server error" : err.message,
