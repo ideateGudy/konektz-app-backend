@@ -115,6 +115,11 @@ const options: swaggerJsdoc.Options = {
               format: "uuid",
               example: "m1m2m3m4-0000-0000-0000-000000000001",
             },
+            conversationId: {
+              type: "string",
+              format: "uuid",
+              example: "c1d2e3f4-0000-0000-0000-000000000001",
+            },
             senderId: {
               type: "string",
               format: "uuid",
@@ -123,6 +128,35 @@ const options: swaggerJsdoc.Options = {
             senderName: { type: "string", example: "johndoe" },
             content: { type: "string", example: "Hello!" },
             createdAt: { type: "string", format: "date-time" },
+          },
+        },
+        SentMessage: {
+          type: "object",
+          properties: {
+            id: {
+              type: "string",
+              format: "uuid",
+              example: "m1m2m3m4-0000-0000-0000-000000000001",
+            },
+            conversationId: {
+              type: "string",
+              format: "uuid",
+              example: "c1d2e3f4-0000-0000-0000-000000000001",
+            },
+            senderId: {
+              type: "string",
+              format: "uuid",
+              example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+            },
+            content: { type: "string", example: "Hello!" },
+            createdAt: { type: "string", format: "date-time" },
+            updatedAt: { type: "string", format: "date-time" },
+            sender: {
+              type: "object",
+              properties: {
+                username: { type: "string", example: "johndoe" },
+              },
+            },
           },
         },
         CreateConversationRequest: {
