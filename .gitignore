@@ -9,3 +9,7 @@ dist/
 
 # Logs
 logs/
+
+# Prisma Client
+/src/generated/
+
