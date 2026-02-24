@@ -1,6 +1,6 @@
 # Konektz App Backend
 
-A RESTful API backend for the **Konektz** application, built with **Node.js**, **Express 5**, **TypeScript**, and **PostgreSQL**.
+A RESTful API backend for the **Konektz** application, built with **Node.js**, **Express 5**, **TypeScript**, **Prisma ORM**, and **PostgreSQL**.
 
 ---
 
@@ -15,14 +15,19 @@ A RESTful API backend for the **Konektz** application, built with **Node.js**, *
     - [Installation](#installation)
     - [Environment Variables](#environment-variables)
     - [Database Setup](#database-setup)
+      - [Schema Overview](#schema-overview)
     - [Running the Server](#running-the-server)
   - [API Reference](#api-reference)
     - [Base](#base)
     - [Health](#health)
     - [Auth](#auth)
       - [Register](#register)
-        - [**Request Body**](#request-body)
       - [Login](#login)
+    - [Conversations](#conversations)
+      - [Get Conversations](#get-conversations)
+      - [Create Conversation](#create-conversation)
+      - [Get Messages](#get-messages)
+      - [Send Message](#send-message)
   - [API Documentation (Swagger)](#api-documentation-swagger)
   - [Error Handling](#error-handling)
   - [Scripts](#scripts)
@@ -31,15 +36,17 @@ A RESTful API backend for the **Konektz** application, built with **Node.js**, *
 
 ## Tech Stack
 
-| Layer          | Technology                         |
-| -------------- | ---------------------------------- |
-| Runtime        | Node.js                            |
-| Framework      | Express 5                          |
-| Language       | TypeScript 5                       |
-| Database       | PostgreSQL (via `pg` Pool)         |
-| Authentication | JWT (`jsonwebtoken`) + bcrypt      |
-| API Docs       | Swagger UI (`swagger-jsdoc`)       |
-| Package Manager| pnpm                               |
+| Layer           | Technology                                                       |
+| --------------- | ---------------------------------------------------------------- |
+| Runtime         | Node.js 20+                                                      |
+| Framework       | Express 5                                                        |
+| Language        | TypeScript 5                                                     |
+| ORM             | Prisma 7 (`@prisma/client` + `@prisma/adapter-pg`)               |
+| Database        | PostgreSQL (via `pg` Pool → Prisma `PrismaPg` adapter)           |
+| Authentication  | JWT (`jsonwebtoken`) + bcrypt                                    |
+| API Docs        | Swagger UI (`swagger-jsdoc` + `swagger-ui-express`)              |
+| Dev Runner      | `tsx` (hot-reload)                                               |
+| Package Manager | pnpm                                                             |
 
 ---
 
@@ -47,21 +54,31 @@ A RESTful API backend for the **Konektz** application, built with **Node.js**, *
 
 ```sh
 konektz-app-backend/
+├── prisma/
+│   ├── schema.prisma         # Prisma data models (User, Conversation, Message)
+│   └── migrations/           # Auto-generated migration files
+├── prisma.config.ts          # Prisma v7 config (datasource URL)
 ├── src/
 │   ├── index.ts              # Entry point — starts the HTTP server
 │   ├── app.ts                # Express app setup (middleware, routes)
 │   ├── config/
-│   │   └── swagger.ts        # OpenAPI / Swagger configuration
-│   ├── controller/
-│   │   └── auth.controller.ts # Register & login handlers
+│   │   ├── env.ts            # Environment variable validation & typed exports
+│   │   └── swagger.ts        # OpenAPI / Swagger configuration & schemas
+│   ├── controllers/
+│   │   ├── auth.controler.ts          # Register & login handlers
+│   │   └── conversation.controller.ts # Conversation & message handlers
+│   ├── generated/
+│   │   └── prisma/           # Auto-generated Prisma client (gitignored)
 │   ├── middleware/
-│   │   └── errorHandler.ts   # Global error & 404 handlers
+│   │   ├── auth.middleware.ts  # JWT verification middleware
+│   │   └── errorHandler.ts     # Global error & 404 handlers
 │   ├── models/
-│   │   └── db.ts             # PostgreSQL connection pool
+│   │   └── db.ts             # Prisma client singleton
 │   ├── routes/
-│   │   ├── auth.route.ts     # /auth routes
-│   │   └── health.route.ts   # /health route
-│   ├── services/             # Business logic (to be implemented)
+│   │   ├── auth.route.ts         # /auth routes
+│   │   ├── conversation.route.ts # /conversations routes
+│   │   └── health.route.ts       # /health route
+│   ├── services/             # Business logic (reserved for future use)
 │   └── utils/
 │       └── AppError.ts       # Custom operational error class
 ├── tsconfig.json
@@ -75,7 +92,7 @@ konektz-app-backend/
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) v18+
+- [Node.js](https://nodejs.org/) v20+
 - [pnpm](https://pnpm.io/) v10+
 - [PostgreSQL](https://www.postgresql.org/) v14+
 
@@ -88,6 +105,9 @@ cd konektz-app-backend
 
 # Install dependencies
 pnpm install
+
+# Generate the Prisma client
+pnpm prisma:generate
 ```
 
 ### Environment Variables
@@ -99,47 +119,53 @@ Create a `.env` file in the project root:
 PORT=5000
 NODE_ENV=development
 
-# PostgreSQL
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=konektz
-DB_USER=postgres
-DB_PASSWORD=your_db_password
+# PostgreSQL (single connection string — required by Prisma)
+DATABASE_URL=postgresql://postgres:your_password@localhost:5432/konektz_dev
 
 # JWT
 JWT_SECRET=your_super_secret_jwt_key
 ```
 
-| Variable      | Default       | Description                          |
-| ------------- | ------------- | ------------------------------------ |
-| `PORT`        | `5000`        | HTTP port the server listens on      |
-| `NODE_ENV`    | —             | `development` or `production`        |
-| `DB_HOST`     | `localhost`   | PostgreSQL host                      |
-| `DB_PORT`     | `5432`        | PostgreSQL port                      |
-| `DB_NAME`     | `konektz`     | PostgreSQL database name             |
-| `DB_USER`     | `postgres`    | PostgreSQL user                      |
-| `DB_PASSWORD` | —             | PostgreSQL password                  |
-| `JWT_SECRET`  | —             | Secret key used to sign JWT tokens   |
+| Variable       | Default       | Required | Description                                 |
+| -------------- | ------------- | -------- | ------------------------------------------- |
+| `PORT`         | `5000`        | No       | HTTP port the server listens on             |
+| `NODE_ENV`     | `development` | No       | `development` or `production`               |
+| `DATABASE_URL` | —             | **Yes**  | PostgreSQL connection string used by Prisma |
+| `JWT_SECRET`   | —             | **Yes**  | Secret key used to sign JWT tokens          |
+
+> The server validates `DATABASE_URL` and `JWT_SECRET` on startup and exits immediately if either is missing.
 
 ### Database Setup
 
-Run the following SQL to create the required `users` table:
+Apply the Prisma schema to your database to create all tables and relationships:
 
-```sql
-CREATE TABLE users (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    username VARCHAR(50) NOT NULL UNIQUE,
-    email VARCHAR(100) NOT NULL UNIQUE,
-    password VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+```bash
+pnpm prisma:migrate
 ```
+
+This runs `prisma migrate dev`, which:
+
+1. Detects schema changes in `prisma/schema.prisma`
+2. Generates a timestamped migration file under `prisma/migrations/`
+3. Applies the migration to your PostgreSQL database
+4. Regenerates the Prisma client
+
+> Run this once on initial setup, and again whenever `prisma/schema.prisma` changes.
+
+#### Schema Overview
+
+| Table           | Description                                   |
+| --------------- | --------------------------------------------- |
+| `users`         | User accounts (id, username, email, password) |
+| `conversations` | 1-to-1 conversations between two participants |
+| `messages`      | Messages belonging to a conversation          |
+
+All primary keys are **UUID strings** (`String @id @default(uuid())`).
 
 ### Running the Server
 
 ```bash
-# Development (hot-reload via ts-node-dev)
+# Development — hot-reload via tsx
 pnpm dev
 
 # Production build
@@ -202,7 +228,7 @@ All responses follow a consistent JSON shape:
 
 Creates a new user account.
 
-##### **Request Body**
+**Request Body**
 
 ```json
 {
@@ -212,11 +238,11 @@ Creates a new user account.
 }
 ```
 
-| Field      | Type   | Required | Description          |
-| ---------- | ------ | -------- | -------------------- |
-| `username` | string | Yes      | Unique display name  |
-| `email`    | string | Yes      | Valid email address  |
-| `password` | string | Yes      | Plain-text password  |
+| Field      | Type   | Required | Description         |
+| ---------- | ------ | -------- | ------------------- |
+| `username` | string | Yes      | Unique display name |
+| `email`    | string | Yes      | Valid email address |
+| `password` | string | Yes      | Plain-text password |
 
 **Response `201`**
 
@@ -226,21 +252,21 @@ Creates a new user account.
   "message": "User registered successfully",
   "data": {
     "user": {
-      "id": "a1b2c3d4-...",
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
       "username": "johndoe",
       "email": "john@example.com",
-      "created_at": "2026-02-23T10:00:00.000Z",
-      "updated_at": "2026-02-23T10:00:00.000Z"
+      "createdAt": "2026-02-24T10:00:00.000Z",
+      "updatedAt": "2026-02-24T10:00:00.000Z"
     }
   }
 }
 ```
 
-| Status | Meaning                              |
-| ------ | ------------------------------------ |
-| `201`  | User created successfully            |
-| `400`  | Missing required fields              |
-| `409`  | Email or username already in use     |
+| Status | Meaning                          |
+| ------ | -------------------------------- |
+| `201`  | User created successfully        |
+| `400`  | Missing required fields          |
+| `409`  | Email or username already in use |
 
 ---
 
@@ -259,11 +285,6 @@ Authenticates a user and returns a signed JWT.
 }
 ```
 
-| Field      | Type   | Required | Description         |
-| ---------- | ------ | -------- | ------------------- |
-| `email`    | string | Yes      | Registered email    |
-| `password` | string | Yes      | Account password    |
-
 **Response `200`**
 
 ```json
@@ -273,7 +294,7 @@ Authenticates a user and returns a signed JWT.
   "token": "<JWT_TOKEN>",
   "data": {
     "user": {
-      "id": "a1b2c3d4-...",
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
       "username": "johndoe",
       "email": "john@example.com"
     }
@@ -281,17 +302,177 @@ Authenticates a user and returns a signed JWT.
 }
 ```
 
-The returned `token` is a **Bearer JWT** valid for **7 days**. Include it in subsequent authenticated requests:
+The returned `token` is a **Bearer JWT** valid for **7 days**. Include it in all authenticated requests:
 
 ```sh
 Authorization: Bearer <JWT_TOKEN>
 ```
 
-| Status | Meaning                    |
-| ------ | -------------------------- |
-| `200`  | Login successful           |
-| `400`  | Missing email or password  |
-| `401`  | Invalid credentials        |
+| Status | Meaning                   |
+| ------ | ------------------------- |
+| `200`  | Login successful          |
+| `400`  | Missing email or password |
+| `401`  | Invalid credentials       |
+
+---
+
+### Conversations
+
+All conversation routes require authentication via `Authorization: Bearer <token>`.
+
+#### Get Conversations
+
+`GET /conversations`
+
+Returns all conversations the authenticated user is part of, including participant details and the last message.
+
+**Response `200`**
+
+```json
+{
+  "status": "success",
+  "data": {
+    "conversations": [
+      {
+        "id": "uuid",
+        "participantOne": { "id": "uuid", "username": "alice", "email": "alice@example.com" },
+        "participantTwo": { "id": "uuid", "username": "bob",   "email": "bob@example.com" },
+        "lastMessage": {
+          "id": "uuid",
+          "content": "Hey!",
+          "senderId": "uuid",
+          "createdAt": "2026-02-24T10:00:00.000Z"
+        }
+      }
+    ]
+  }
+}
+```
+
+---
+
+#### Create Conversation
+
+`POST /conversations`
+
+Starts a new 1-to-1 conversation with another user.
+
+**Request Body**
+
+```json
+{
+  "participant_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+}
+```
+
+| Field            | Type          | Required | Description                        |
+| ---------------- | ------------- | -------- | ---------------------------------- |
+| `participant_id` | string (UUID) | Yes      | UUID of the other participant      |
+
+**Response `201`**
+
+```json
+{
+  "status": "success",
+  "message": "Conversation created",
+  "data": {
+    "conversation": {
+      "id": "uuid",
+      "participantOneId": "uuid",
+      "participantTwoId": "uuid"
+    }
+  }
+}
+```
+
+| Status | Meaning                                       |
+| ------ | --------------------------------------------- |
+| `201`  | Conversation created                          |
+| `400`  | Missing `participant_id` or self-conversation |
+| `404`  | Participant user not found                    |
+| `409`  | Conversation already exists                   |
+
+---
+
+#### Get Messages
+
+`GET /conversations/:id/messages`
+
+Returns all messages in the specified conversation.
+
+| Param | Type          | Description     |
+| ----- | ------------- | --------------- |
+| `id`  | string (UUID) | Conversation ID |
+
+**Response `200`**
+
+```json
+{
+  "status": "success",
+  "data": {
+    "messages": [
+      {
+        "id": "uuid",
+        "content": "Hello!",
+        "senderId": "uuid",
+        "sender": { "username": "johndoe" },
+        "createdAt": "2026-02-24T10:00:00.000Z"
+      }
+    ]
+  }
+}
+```
+
+| Status | Meaning                |
+| ------ | ---------------------- |
+| `200`  | Success                |
+| `403`  | Not a participant      |
+| `404`  | Conversation not found |
+
+---
+
+#### Send Message
+
+`POST /conversations/:id/messages`
+
+Sends a message in the specified conversation.
+
+| Param | Type          | Description     |
+| ----- | ------------- | --------------- |
+| `id`  | string (UUID) | Conversation ID |
+
+**Request Body**
+
+```json
+{
+  "content": "Hello there!"
+}
+```
+
+**Response `201`**
+
+```json
+{
+  "status": "success",
+  "message": "Message sent",
+  "data": {
+    "message": {
+      "id": "uuid",
+      "conversationId": "uuid",
+      "senderId": "uuid",
+      "content": "Hello there!",
+      "createdAt": "2026-02-24T10:00:00.000Z"
+    }
+  }
+}
+```
+
+| Status | Meaning                |
+| ------ | ---------------------- |
+| `201`  | Message sent           |
+| `400`  | Missing `content`      |
+| `403`  | Not a participant      |
+| `404`  | Conversation not found |
 
 ---
 
@@ -322,27 +503,32 @@ All errors return a consistent JSON envelope:
 }
 ```
 
-The global error handler (`src/middleware/errorHandler.ts`) automatically maps:
+The global error handler (`src/middleware/errorHandler.ts`) maps errors to appropriate HTTP status codes:
 
-| Scenario                         | Status |
-| -------------------------------- | ------ |
-| Validation / operational errors  | Varies |
-| PostgreSQL unique violation      | `409`  |
-| PostgreSQL foreign-key violation | `404`  |
-| PostgreSQL not-null violation    | `400`  |
-| Invalid JWT                      | `401`  |
-| Expired JWT                      | `401`  |
-| Route not found                  | `404`  |
-| Unhandled server errors          | `500`  |
+| Scenario                                    | Status |
+| ------------------------------------------- | ------ |
+| Prisma unique constraint violation (P2002)  | `409`  |
+| Prisma foreign-key violation (P2003)        | `404`  |
+| Prisma not-null violation (P2011)           | `400`  |
+| Prisma record not found (P2025)             | `404`  |
+| Prisma validation error                     | `400`  |
+| Prisma initialization / connection error    | `503`  |
+| Invalid JWT                                 | `401`  |
+| Expired JWT                                 | `401`  |
+| Operational / custom `AppError`             | Varies |
+| Route not found                             | `404`  |
+| Unhandled server errors                     | `500`  |
 
-> In **development** mode, the `500` response also includes the `stack` trace. In **production** it is hidden.
+> In **development** mode, `500` responses include the stack trace. In **production** it is hidden.
 
 ---
 
 ## Scripts
 
-| Command       | Description                                    |
-| ------------- | ---------------------------------------------- |
-| `pnpm dev`    | Start dev server with hot-reload (ts-node-dev) |
-| `pnpm build`  | Compile TypeScript to `dist/`                  |
-| `pnpm start`  | Run the compiled production build              |
+| Command                | Description                                             |
+| ---------------------- | ------------------------------------------------------- |
+| `pnpm dev`             | Start dev server with hot-reload (`tsx watch`)          |
+| `pnpm build`           | Compile TypeScript to `dist/`                           |
+| `pnpm start`           | Run the compiled production build                       |
+| `pnpm prisma:generate` | Regenerate the Prisma client from `schema.prisma`       |
+| `pnpm prisma:migrate`  | Create and apply a new migration (`prisma migrate dev`) |
