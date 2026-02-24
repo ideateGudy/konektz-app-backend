@@ -5,6 +5,8 @@ import {
   createConversation,
   getMessages,
   sendMessage,
+  deleteConversation,
+  restoreConversation,
 } from "../controllers/conversation.controller";
 
 const router = Router();
@@ -74,7 +76,10 @@ router.get("/", fetchConversations);
  *                 conversation:
  *                   type: object
  *                   properties:
- *                     id: { type: integer, example: 1 }
+ *                     id:
+ *                       type: string
+ *                       format: uuid
+ *                       example: c1d2e3f4-0000-0000-0000-000000000001
  *       200:
  *         description: Conversation already exists — returns existing record
  *         content:
@@ -88,7 +93,10 @@ router.get("/", fetchConversations);
  *                 conversation:
  *                   type: object
  *                   properties:
- *                     id: { type: integer, example: 1 }
+ *                     id:
+ *                       type: string
+ *                       format: uuid
+ *                       example: c1d2e3f4-0000-0000-0000-000000000001
  *       400:
  *         description: Missing participant_id or trying to message yourself
  *         content:
@@ -192,7 +200,7 @@ router.get("/:id/messages", getMessages);
  *                   type: string
  *                   example: success
  *                 message:
- *                   $ref: '#/components/schemas/Message'
+ *                   $ref: '#/components/schemas/SentMessage'
  *       400:
  *         description: Missing or empty content
  *         content:
@@ -213,5 +221,97 @@ router.get("/:id/messages", getMessages);
  *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.post("/:id/messages", sendMessage);
+
+/**
+ * @openapi
+ * /conversations/{id}:
+ *   delete:
+ *     tags:
+ *       - Conversations
+ *     summary: Soft-delete a conversation for the current user. Permanently deletes when both users have deleted it.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Conversation ID
+ *     responses:
+ *       200:
+ *         description: Conversation deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: success
+ *                 message:
+ *                   type: string
+ *                   example: Conversation deleted
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Conversation not found or already deleted by you
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.delete("/:id", deleteConversation);
+
+/**
+ * @openapi
+ * /conversations/{id}/restore:
+ *   post:
+ *     tags:
+ *       - Conversations
+ *     summary: Restore a previously soft-deleted conversation (only if the other user hasn't deleted it)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Conversation ID
+ *     responses:
+ *       200:
+ *         description: Conversation restored
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: success
+ *                 message:
+ *                   type: string
+ *                   example: Conversation restored
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Conversation not found or has not been deleted by you
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.post("/:id/restore", restoreConversation);
 
 export default router;
