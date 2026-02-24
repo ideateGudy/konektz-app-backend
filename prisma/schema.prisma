@@ -29,9 +29,11 @@ model User {
 }
 
 model Conversation {
-  id               String @id @default(uuid())
-  participantOneId String @map("participant_one")
-  participantTwoId String @map("participant_two")
+  id               String  @id @default(uuid())
+  participantOneId String  @map("participant_one")
+  participantTwoId String  @map("participant_two")
+  deletedByOne     Boolean @default(false) @map("deleted_by_one")
+  deletedByTwo     Boolean @default(false) @map("deleted_by_two")
 
   participantOne User      @relation("ParticipantOne", fields: [participantOneId], references: [id])
   participantTwo User      @relation("ParticipantTwo", fields: [participantTwoId], references: [id])
@@ -46,6 +48,7 @@ model Message {
   senderId       String   @map("sender_id")
   content        String
   createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at")
 
   conversation Conversation @relation(fields: [conversationId], references: [id])
   sender       User         @relation(fields: [senderId], references: [id])
