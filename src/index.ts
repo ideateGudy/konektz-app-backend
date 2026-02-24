@@ -1,5 +1,4 @@
-import dotenv from "dotenv";
-dotenv.config({ debug: process.env.NODE_ENV !== "production" });
+import "./config/env"; // Loads .env and validates required vars
 
 import app from "./app";
 
