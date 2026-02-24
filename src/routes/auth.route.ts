@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { login, register } from "../controller/auth.controler";
+import { login, register } from "../controllers/auth.controler";
 
 const router = Router();
 
@@ -30,13 +30,11 @@ const router = Router();
  *                 message:
  *                   type: string
  *                   example: User registered successfully
- *                 user:
+ *                 data:
  *                   type: object
  *                   properties:
- *                     id:          { type: integer, example: 1 }
- *                     username:    { type: string,  example: johndoe }
- *                     email:       { type: string,  example: john@example.com }
- *                     created_at:  { type: string,  format: date-time }
+ *                     user:
+ *                       $ref: '#/components/schemas/User'
  *       400:
  *         description: Missing required fields
  *         content:
@@ -82,12 +80,11 @@ router.post("/register", register);
  *                 token:
  *                   type: string
  *                   example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
- *                 user:
+ *                 data:
  *                   type: object
  *                   properties:
- *                     id:       { type: integer, example: 1 }
- *                     username: { type: string,  example: johndoe }
- *                     email:    { type: string,  example: john@example.com }
+ *                     user:
+ *                       $ref: '#/components/schemas/User'
  *       400:
  *         description: Missing required fields
  *         content:
