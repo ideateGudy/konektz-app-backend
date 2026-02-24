@@ -14,7 +14,10 @@ export const fetchConversations = async (
 
   const conversations = await prisma.conversation.findMany({
     where: {
-      OR: [{ participantOneId: userId }, { participantTwoId: userId }],
+      OR: [
+        { participantOneId: userId, deletedByOne: false },
+        { participantTwoId: userId, deletedByTwo: false },
+      ],
     },
     include: {
       participantOne: { select: { id: true, username: true } },
@@ -49,7 +52,7 @@ export const createConversation = async (
   req: Request,
   res: Response,
 ): Promise<void> => {
-    if (!req.user) {
+  if (!req.user) {
     throw new AppError("Unauthorized", 401);
   }
   const currentUserId = req.user.id;
@@ -106,7 +109,7 @@ export const getMessages = async (
   req: Request,
   res: Response,
 ): Promise<void> => {
-    if (!req.user) {
+  if (!req.user) {
     throw new AppError("Unauthorized", 401);
   }
   const userId = req.user.id;
@@ -133,6 +136,7 @@ export const getMessages = async (
 
   const result = messages.map((m) => ({
     id: m.id,
+    conversationId: m.conversationId,
     senderId: m.senderId,
     senderName: m.sender.username,
     content: m.content,
@@ -181,8 +185,93 @@ export const sendMessage = async (
       senderId: true,
       content: true,
       createdAt: true,
+      updatedAt: true,
+      sender: { select: { username: true } },
     },
   });
 
   res.status(201).json({ status: "success", message });
+};
+
+// DELETE /conversations/:id
+export const deleteConversation = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  if (!req.user) {
+    throw new AppError("Unauthorized", 401);
+  }
+  const userId = req.user.id;
+  const conversationId = String(req.params.id);
+
+  const conversation = await prisma.conversation.findFirst({
+    where: {
+      id: conversationId,
+      OR: [
+        { participantOneId: userId, deletedByOne: false },
+        { participantTwoId: userId, deletedByTwo: false },
+      ],
+    },
+  });
+
+  if (!conversation) {
+    throw new AppError("Conversation not found", 404);
+  }
+
+  const isParticipantOne = conversation.participantOneId === userId;
+
+  // If the other user already deleted it, permanently delete the whole record
+  const otherAlreadyDeleted = isParticipantOne
+    ? conversation.deletedByTwo
+    : conversation.deletedByOne;
+
+  if (otherAlreadyDeleted) {
+    await prisma.conversation.delete({ where: { id: conversationId } });
+  } else {
+    await prisma.conversation.update({
+      where: { id: conversationId },
+      data: isParticipantOne ? { deletedByOne: true } : { deletedByTwo: true },
+    });
+  }
+
+  res.status(200).json({ status: "success", message: "Conversation deleted" });
+};
+
+// POST /conversations/:id/restore
+export const restoreConversation = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  if (!req.user) {
+    throw new AppError("Unauthorized", 401);
+  }
+  const userId = req.user.id;
+  const conversationId = String(req.params.id);
+
+  // Find the conversation where the current user is a participant AND has soft-deleted it
+  const conversation = await prisma.conversation.findFirst({
+    where: {
+      id: conversationId,
+      OR: [
+        { participantOneId: userId, deletedByOne: true },
+        { participantTwoId: userId, deletedByTwo: true },
+      ],
+    },
+  });
+
+  if (!conversation) {
+    throw new AppError(
+      "Conversation not found or has not been deleted by you",
+      404,
+    );
+  }
+
+  const isParticipantOne = conversation.participantOneId === userId;
+
+  await prisma.conversation.update({
+    where: { id: conversationId },
+    data: isParticipantOne ? { deletedByOne: false } : { deletedByTwo: false },
+  });
+
+  res.status(200).json({ status: "success", message: "Conversation restored" });
 };
