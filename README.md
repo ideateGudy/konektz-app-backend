@@ -28,6 +28,8 @@ A RESTful API backend for the **Konektz** application, built with **Node.js**, *
       - [Create Conversation](#create-conversation)
       - [Get Messages](#get-messages)
       - [Send Message](#send-message)
+      - [Delete Conversation](#delete-conversation)
+      - [Restore Conversation](#restore-conversation)
   - [API Documentation (Swagger)](#api-documentation-swagger)
   - [Error Handling](#error-handling)
   - [Scripts](#scripts)
@@ -154,13 +156,15 @@ This runs `prisma migrate dev`, which:
 
 #### Schema Overview
 
-| Table           | Description                                   |
-| --------------- | --------------------------------------------- |
-| `users`         | User accounts (id, username, email, password) |
-| `conversations` | 1-to-1 conversations between two participants |
-| `messages`      | Messages belonging to a conversation          |
+| Table           | Description                                                                             |
+| --------------- | --------------------------------------------------------------------------------------- |
+| `users`         | User accounts (id, username, email, password)                                           |
+| `conversations` | 1-to-1 conversations between two participants, with per-user soft-delete flags          |
+| `messages`      | Messages belonging to a conversation                                                    |
 
 All primary keys are **UUID strings** (`String @id @default(uuid())`).
+
+The `conversations` table has two boolean columns — `deleted_by_one` and `deleted_by_two` — to support per-user soft deletes. The row is permanently removed only when both participants have deleted it.
 
 ### Running the Server
 
@@ -324,28 +328,22 @@ All conversation routes require authentication via `Authorization: Bearer <token
 
 `GET /conversations`
 
-Returns all conversations the authenticated user is part of, including participant details and the last message.
+Returns all conversations the authenticated user is part of and has **not** deleted, including the other participant's details and the last message.
 
 **Response `200`**
 
 ```json
 {
   "status": "success",
-  "data": {
-    "conversations": [
-      {
-        "id": "uuid",
-        "participantOne": { "id": "uuid", "username": "alice", "email": "alice@example.com" },
-        "participantTwo": { "id": "uuid", "username": "bob",   "email": "bob@example.com" },
-        "lastMessage": {
-          "id": "uuid",
-          "content": "Hey!",
-          "senderId": "uuid",
-          "createdAt": "2026-02-24T10:00:00.000Z"
-        }
-      }
-    ]
-  }
+  "conversations": [
+    {
+      "conversationId": "uuid",
+      "participantId": "uuid",
+      "participantName": "alice",
+      "lastMessage": "Hey!",
+      "lastMessageTime": "2026-02-24T10:00:00.000Z"
+    }
+  ]
 }
 ```
 
@@ -385,12 +383,12 @@ Starts a new 1-to-1 conversation with another user.
 }
 ```
 
-| Status | Meaning                                       |
-| ------ | --------------------------------------------- |
-| `201`  | Conversation created                          |
-| `400`  | Missing `participant_id` or self-conversation |
-| `404`  | Participant user not found                    |
-| `409`  | Conversation already exists                   |
+| Status | Meaning                                                                   |
+| ------ | ------------------------------------------------------------------------- |
+| `201`  | Conversation created                                                      |
+| `200`  | Conversation already exists — returns the existing record                 |
+| `400`  | Missing `participant_id` or self-conversation                             |
+| `404`  | Participant user not found                                                |
 
 ---
 
@@ -398,7 +396,7 @@ Starts a new 1-to-1 conversation with another user.
 
 `GET /conversations/:id/messages`
 
-Returns all messages in the specified conversation.
+Returns all messages in the specified conversation, ordered oldest to newest.
 
 | Param | Type          | Description     |
 | ----- | ------------- | --------------- |
@@ -409,24 +407,22 @@ Returns all messages in the specified conversation.
 ```json
 {
   "status": "success",
-  "data": {
-    "messages": [
-      {
-        "id": "uuid",
-        "content": "Hello!",
-        "senderId": "uuid",
-        "sender": { "username": "johndoe" },
-        "createdAt": "2026-02-24T10:00:00.000Z"
-      }
-    ]
-  }
+  "messages": [
+    {
+      "id": "uuid",
+      "senderId": "uuid",
+      "senderName": "johndoe",
+      "content": "Hello!",
+      "createdAt": "2026-02-24T10:00:00.000Z"
+    }
+  ]
 }
 ```
 
 | Status | Meaning                |
 | ------ | ---------------------- |
 | `200`  | Success                |
-| `403`  | Not a participant      |
+| `401`  | Unauthorized           |
 | `404`  | Conversation not found |
 
 ---
@@ -454,14 +450,15 @@ Sends a message in the specified conversation.
 ```json
 {
   "status": "success",
-  "message": "Message sent",
-  "data": {
-    "message": {
-      "id": "uuid",
-      "conversationId": "uuid",
-      "senderId": "uuid",
-      "content": "Hello there!",
-      "createdAt": "2026-02-24T10:00:00.000Z"
+  "message": {
+    "id": "uuid",
+    "conversationId": "uuid",
+    "senderId": "uuid",
+    "content": "Hello there!",
+    "createdAt": "2026-02-24T10:00:00.000Z",
+    "updatedAt": "2026-02-24T10:00:00.000Z",
+    "sender": {
+      "username": "johndoe"
     }
   }
 }
@@ -471,8 +468,62 @@ Sends a message in the specified conversation.
 | ------ | ---------------------- |
 | `201`  | Message sent           |
 | `400`  | Missing `content`      |
-| `403`  | Not a participant      |
+| `401`  | Unauthorized           |
 | `404`  | Conversation not found |
+
+---
+
+#### Delete Conversation
+
+`DELETE /conversations/:id`
+
+Soft-deletes the conversation for the authenticated user only. The other participant continues to see it. When **both** users have deleted the conversation, the record is permanently removed from the database.
+
+| Param | Type          | Description     |
+| ----- | ------------- | --------------- |
+| `id`  | string (UUID) | Conversation ID |
+
+**Response `200`**
+
+```json
+{
+  "status": "success",
+  "message": "Conversation deleted"
+}
+```
+
+| Status | Meaning                                                     |
+| ------ | ----------------------------------------------------------- |
+| `200`  | Soft-deleted (or permanently deleted if both users deleted) |
+| `401`  | Unauthorized                                                |
+| `404`  | Conversation not found or already deleted by you            |
+
+---
+
+#### Restore Conversation
+
+`POST /conversations/:id/restore`
+
+Restores a conversation that the authenticated user previously soft-deleted, provided the conversation still exists (i.e. the other user has not also deleted it, which would have caused a permanent delete).
+
+| Param | Type          | Description     |
+| ----- | ------------- | --------------- |
+| `id`  | string (UUID) | Conversation ID |
+
+**Response `200`**
+
+```json
+{
+  "status": "success",
+  "message": "Conversation restored"
+}
+```
+
+| Status | Meaning                                               |
+| ------ | ----------------------------------------------------- |
+| `200`  | Conversation restored                                 |
+| `401`  | Unauthorized                                          |
+| `404`  | Conversation not found or not previously deleted by you |
 
 ---
 
