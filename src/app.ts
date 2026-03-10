@@ -2,17 +2,22 @@ import express, { Request, Response } from "express";
 import cors from "cors";
 import swaggerUi from "swagger-ui-express";
 import { swaggerSpec } from "./config/swagger";
-import { errorHandler, notFoundHandler } from "./middleware/errorHandler";
 
 // Routes
 import healthRoute from "./routes/health.route";
 import authRoute from "./routes/auth.route";
 import conversationRoute from "./routes/conversation.route";
+import messageRoute from "./routes/message.route";
 
 const app = express();
 
 // ─── Core Middleware ───────────────────────────────────────────────────────────
-app.use(cors());
+app.use(
+  cors({
+    origin: "*",
+    methods: ["GET", "POST", "PUT", "DELETE"],
+  }),
+);
 app.use(express.json());
 
 // ─── Swagger Docs ─────────────────────────────────────────────────────────────
@@ -30,9 +35,6 @@ app.get("/", (_req: Request, res: Response) => {
 app.use("/health", healthRoute);
 app.use("/auth", authRoute);
 app.use("/conversations", conversationRoute);
-
-// ─── Error Handling ────────────────────────────────────────────
-app.use(notFoundHandler);
-app.use(errorHandler);
+app.use("/messages", messageRoute);
 
 export default app;
